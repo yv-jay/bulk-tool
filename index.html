@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CSV Field Formatter</title>
+  </head>
+  <style>
+    body {
+        font-family: Arial, sans-serif;
+        margin: 20px;
+    }
+
+    h1 {
+        text-align: center;
+    }
+
+    #file-input {
+        margin-bottom: 20px;
+    }
+
+    #output {
+        margin-top: 20px;
+        white-space: pre-wrap;
+        background-color: #f8f9fa;
+        border: 1px solid #ddd;
+        padding: 10px;
+        max-height: 400px;
+        overflow-y: auto;
+    }
+
+    button {
+        margin-top: 10px;
+        padding: 10px;
+        font-size: 16px;
+        cursor: pointer;
+        background-color: #007bff;
+        color: white;
+        border: none;
+        border-radius: 5px;
+    }
+
+    button:hover {
+        background-color: #0056b3;
+    }
+
+    #customPatternContainer {
+        display: none;
+        margin-top: 20px;
+    }
+
+    .btn-group{
+      display: flex;
+    }
+    .btn-group button{
+      margin-right: 1em;
+    }
+  </style>
+  <body>
+    <h1>CSV Field Formatter</h1>
+    <p>
+      Upload a CSV with one column and select a pattern to format the fields.
+    </p>
+
+    <label for="patternSelector">Choose a pattern:</label>
+    <select id="patternSelector">
+      <option value="lastInstance">Last Instance</option>
+      <option value="listgroup_li">List Group (List Elements)</option>
+      <option value="listgroup_div">List Group (Div Elements)</option>
+      <option value="branch_1_2">Branching 1 & 2</option>
+      <option value="branch_3">Branching 3</option>
+      <option value="branch_4_5">Branching 4 & 5</option>
+      <option value="listgroup_note" title="List group item with List Group on the left"> List Group (w/ Notebox)</option>
+      <option value="listgroup_header" title="Similiar to List Group w/ Notebox but no Notes Box">List Group (w/ Header Label)</option>
+      <option value="custom">Custom</option>
+    </select>
+
+    <div id="customPatternContainer">
+      <label for="customPattern">Enter Custom Pattern:</label>
+      <textarea id="customPattern" rows="4" cols="50"></textarea>
+    </div>
+
+    <br /><br />
+
+    <input type="file" id="csvFileInput" accept=".csv" />
+    <div class="btn-group">
+      <button id="previewButton">Preview</button>
+      <button id="copyClipboard">Copy to Clipboard</button>
+      <button id="downloadButton">Download</button>
+    </div>
+    
+
+    <div id="output"></div>
+
+    <script>
+      const patterns = {
+        lastInstance: (field) => `@DEFAULT="[${field}:value][last-instance]"`,
+        listgroup_li: (field) => `<li class="list-group-item" data-shazam-mirror-visibility="${field}">
+                                      <div class="shazam">${field}:label</div>
+                                      <div class="shazam">${field}</div>
+                                    </li>`,
+        listgroup_div: (field) => `<div class="list-group-item" data-shazam-mirror-visibility="${field}">
+                                    <div class="shazam">${field}:label</div>
+                                    <div class="shazam">${field}</div>
+                                  </div>`,
+        branch_1_2: (field) => `[${field}] = "1" OR [${field}] = "2" OR`,
+        branch_3: (field) => `[${field}] = "3" OR`,
+        branch_4_5: (field) => `[${field}] = "4" OR [${field}] = "5" OR`,
+        listgroup_note: (field) => `<div class="list-group-item" data-shazam-mirror-visibility="${field}">
+                                        <li class="list-group-item list-group-item-info shazam">${field}:label</li>
+                                        <div class="pair">
+                                            <div class="shazam">notes_${field}</div>
+                                            <div class="shazam">${field}</div>
+                                        </div>
+                                    </div>`,
+        listgroup_header: (field) => `<div class="list-group-item" data-shazam-mirror-visibility="${field}">
+                                        <li class="list-group-item list-group-item-info shazam">${field}:label</li>
+                                            <div class="shazam">${field}</div>
+                                    </div>`,
+      };
+
+      document.getElementById("patternSelector").addEventListener("change", function() {
+        document.getElementById("customPatternContainer").style.display = this.value === "custom" ? "block" : "none";
+      });
+
+      function processCsv(preview = false) {
+        const fileInput = document.getElementById("csvFileInput");
+        const patternKey = document.getElementById("patternSelector").value;
+
+        if (!fileInput.files.length) {
+          alert("Please upload a CSV file.");
+          return;
+        }
+
+        const file = fileInput.files[0];
+        const reader = new FileReader();
+
+        reader.onload = (event) => {
+          const csvContent = event.target.result;
+          const rows = csvContent.split(/\r?\n/).filter((row) => row.trim() !== "");
+
+          let patternFunction;
+          if (patternKey === "custom") {
+            const customPattern = document.getElementById("customPattern").value;
+            patternFunction = (field) => customPattern.replace(/\[field\]/g, field);
+          } else {
+            patternFunction = patterns[patternKey];
+          }
+
+          const formattedRows = rows.map((field) => (patternFunction ? patternFunction(field) : field));
+
+          if (preview) {
+            document.getElementById("output").textContent = formattedRows.join("\n");
+          } else {
+            const outputCsv = formattedRows.join("\n");
+            const fileName = `formatted_fields_${new Date().toISOString().replace(/[-:.TZ]/g, "")}.csv`;
+            downloadFile(outputCsv, fileName);
+          }
+        };
+
+        reader.readAsText(file);
+      }
+
+      function downloadFile(content, filename) {
+        const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+
+      document.getElementById("previewButton").addEventListener("click", () => processCsv(true));
+      document.getElementById("downloadButton").addEventListener("click", () => processCsv(false));
+      document.getElementById("copyClipboard").addEventListener("click", () => {
+        const output = document.getElementById("output");
+        const textArea = document.createElement("textarea");
+        textArea.value = output.textContent;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textArea);
+        alert("Copied to clipboard!");
+      });
+    </script>
+  </body>
+</html>
